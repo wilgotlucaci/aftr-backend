@@ -1,4 +1,4 @@
-pydanticpythnpydantic
+pydantic
 requests
 python-dotenv
 supabase
