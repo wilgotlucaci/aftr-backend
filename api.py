@@ -1,0 +1,304 @@
+from datetime import datetime
+
+from fastapi import Depends, FastAPI, HTTPException
+from pydantic import BaseModel
+
+from auth.current_user import get_current_user
+from recap import build_serialized_recap
+from repositories.location_repository import LocationRepository
+from repositories.night_repository import NightRepository
+from repositories.participant_repository import ParticipantRepository
+from repositories.recap_repository import RecapRepository
+
+
+app = FastAPI(
+    title="AFTR API",
+    version="0.1.0",
+)
+
+night_repository = NightRepository()
+participant_repository = ParticipantRepository()
+location_repository = LocationRepository()
+recap_repository = RecapRepository()
+
+
+class CreateNightRequest(BaseModel):
+    title: str
+
+
+class CreateLocationRequest(BaseModel):
+    latitude: float
+    longitude: float
+
+
+@app.get("/")
+def root():
+    return {
+        "status": "ok",
+        "service": "AFTR API",
+    }
+
+
+@app.get("/me")
+def get_me(
+    current_user=Depends(get_current_user),
+):
+    return current_user
+
+
+@app.post("/nights")
+def create_night(
+    request: CreateNightRequest,
+    current_user=Depends(get_current_user),
+):
+    night = night_repository.create(
+        title=request.title,
+        started_at=datetime.now().astimezone().isoformat(),
+        owner_user_id=current_user["id"],
+        status="active",
+    )
+
+    if night is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not create Night",
+        )
+
+    return night
+
+
+@app.post("/nights/{night_id}/participants")
+def join_night(
+    night_id: str,
+    current_user=Depends(get_current_user),
+):
+    night = night_repository.get_by_id(night_id)
+
+    if night is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Night not found",
+        )
+
+    participant = participant_repository.add_to_night(
+        night_id=night_id,
+        user_id=current_user["id"],
+        joined_at=datetime.now().astimezone().isoformat(),
+    )
+
+    if participant is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not add participant",
+        )
+
+    return participant
+
+
+@app.post("/nights/{night_id}/locations")
+def create_location(
+    night_id: str,
+    request: CreateLocationRequest,
+    current_user=Depends(get_current_user),
+):
+    night = night_repository.get_by_id(night_id)
+
+    if night is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Night not found",
+        )
+
+    is_participant = participant_repository.is_in_night(
+        night_id=night_id,
+        user_id=current_user["id"],
+    )
+
+    if not is_participant:
+        raise HTTPException(
+            status_code=403,
+            detail="You are not a participant in this Night",
+        )
+
+    location = location_repository.create(
+        night_id=night_id,
+        user_id=current_user["id"],
+        recorded_at=datetime.now().astimezone().isoformat(),
+        latitude=request.latitude,
+        longitude=request.longitude,
+    )
+
+    if location is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not save location",
+        )
+
+    return location
+
+
+@app.get("/nights/{night_id}")
+def get_night(
+    night_id: str,
+    current_user=Depends(get_current_user),
+):
+    night = night_repository.get_by_id(night_id)
+
+    if night is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Night not found",
+        )
+
+    is_participant = participant_repository.is_in_night(
+        night_id=night_id,
+        user_id=current_user["id"],
+    )
+
+    is_owner = night.owner_user_id == current_user["id"]
+
+    if not is_participant and not is_owner:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have access to this Night",
+        )
+
+    return {
+        "id": night.id,
+        "title": night.title,
+        "started_at": night.started_at.isoformat(),
+        "ended_at": (
+            night.ended_at.isoformat()
+            if night.ended_at
+            else None
+        ),
+        "status": night.status.value,
+        "owner_user_id": night.owner_user_id,
+        "participant_count": len(night.participants),
+        "location_point_count": len(night.locations),
+        "participants": [
+            {
+                "id": participant.id,
+                "name": participant.name,
+            }
+            for participant in night.participants
+        ],
+    }
+
+
+@app.post("/nights/{night_id}/end")
+def end_night(
+    night_id: str,
+    current_user=Depends(get_current_user),
+):
+    night = night_repository.get_by_id(night_id)
+
+    if night is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Night not found",
+        )
+
+    if night.owner_user_id != current_user["id"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the Night host can end this Night",
+        )
+
+    ended_night = night_repository.end(
+        night_id=night_id,
+        ended_at=datetime.now().astimezone().isoformat(),
+    )
+
+    if ended_night is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not end Night",
+        )
+
+    finished_night = night_repository.get_by_id(night_id)
+
+    recap = build_serialized_recap(
+        finished_night
+    )
+
+    recap_repository.save(
+        night_id,
+        recap,
+    )
+
+    return {
+        "night": ended_night,
+        "recap_generated": True,
+        "recap": recap,
+    }
+
+
+@app.get("/nights/{night_id}/recap")
+def get_night_recap(
+    night_id: str,
+    current_user=Depends(get_current_user),
+):
+    night = night_repository.get_by_id(night_id)
+
+    if night is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Night not found",
+        )
+
+    is_participant = participant_repository.is_in_night(
+        night_id=night_id,
+        user_id=current_user["id"],
+    )
+
+    is_owner = night.owner_user_id == current_user["id"]
+
+    if not is_participant and not is_owner:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have access to this Night",
+        )
+
+    saved_recap = recap_repository.get_by_night_id(
+        night_id
+    )
+
+    if saved_recap is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Recap not generated yet",
+        )
+
+    return saved_recap["recap_data"]
+
+
+@app.post("/nights/{night_id}/recap/generate")
+def generate_night_recap(
+    night_id: str,
+    current_user=Depends(get_current_user),
+):
+    night = night_repository.get_by_id(night_id)
+
+    if night is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Night not found",
+        )
+
+    if night.owner_user_id != current_user["id"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Only the Night host can generate the recap",
+        )
+
+    recap = build_serialized_recap(
+        night
+    )
+
+    recap_repository.save(
+        night_id,
+        recap,
+    )
+
+    return recap
