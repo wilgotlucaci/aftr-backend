@@ -53,6 +53,9 @@ def build_venue_stats(night: Night):
 
     return {
         "type": "venue_stats",
+        # total_places is what the iOS client reads; places_visited kept
+        # for any existing callers.
+        "total_places": len(known_stops),
         "places_visited": len(known_stops),
         "first_venue": {
             "name": first_stop["venue_name"],
