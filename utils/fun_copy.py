@@ -44,7 +44,7 @@ Tone:
 - slightly cheeky
 - confident
 - sounds like a funny friend
-- never mean
+- can be a little mean, but never aggressive
 - never overly enthusiastic
 - never corporate
 - no emojis

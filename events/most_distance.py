@@ -2,12 +2,47 @@ from collections import defaultdict
 
 from models import Night
 from utils.distance import distance_meters
+from utils.participant_lifecycle import build_participant_lifecycles
 
 
 def detect_most_distance(night: Night):
+    # Only count movement while a participant is still part of the Night -
+    # the walk (or drive) home after they've split off doesn't count.
+    lifecycles = build_participant_lifecycles(night)
+
+    # (start, end, end_is_exclusive) per participant. A participant who
+    # split off has an exclusive end at that moment, so the first "I'm
+    # home now" ping - and the long jump to it - is dropped.
+    window = {}
+    for lifecycle in lifecycles:
+        if lifecycle["left_night_at"] is not None:
+            window[lifecycle["participant_id"]] = (
+                lifecycle["joined_at"],
+                lifecycle["left_night_at"],
+                True,
+            )
+        else:
+            window[lifecycle["participant_id"]] = (
+                lifecycle["joined_at"],
+                night.ended_at,
+                False,
+            )
+
     participant_locations = defaultdict(list)
 
     for location in night.locations:
+        bounds = window.get(location.participant_id)
+
+        if bounds is not None:
+            start, end, end_is_exclusive = bounds
+            if location.timestamp < start:
+                continue
+            if end is not None:
+                if end_is_exclusive and location.timestamp >= end:
+                    continue
+                if not end_is_exclusive and location.timestamp > end:
+                    continue
+
         participant_locations[location.participant_id].append(location)
 
     distances = {}
@@ -24,14 +59,12 @@ def detect_most_distance(night: Night):
             current = sorted_locations[index]
             next_location = sorted_locations[index + 1]
 
-            distance = distance_meters(
+            total_distance += distance_meters(
                 current.latitude,
                 current.longitude,
                 next_location.latitude,
                 next_location.longitude,
             )
-
-            total_distance += distance
 
         distances[participant_id] = total_distance
 

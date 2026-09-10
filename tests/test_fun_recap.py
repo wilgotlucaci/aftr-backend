@@ -27,6 +27,30 @@ def test_empty_recap_yields_no_facts():
     assert build_fun_facts({"events": {}}) == []
 
 
+def test_a_real_length_night_always_has_at_least_one_fact():
+    from datetime import datetime
+
+    recap = {
+        "events": {},
+        "started_at": datetime(2026, 9, 10, 22, 0),
+        "ended_at": datetime(2026, 9, 11, 3, 20),
+    }
+    facts = build_fun_facts(recap)
+    length = next(f for f in facts if f["type"] == "night_length")
+    assert length["hours"] == 5 and length["minutes"] == 20
+
+
+def test_a_trivial_length_night_still_has_no_facts():
+    from datetime import datetime
+
+    recap = {
+        "events": {},
+        "started_at": datetime(2026, 9, 10, 22, 0),
+        "ended_at": datetime(2026, 9, 10, 22, 10),
+    }
+    assert build_fun_facts(recap) == []
+
+
 def test_pulls_a_broad_set_of_facts():
     recap = {
         "participants": [{"name": "A"}, {"name": "B"}, {"name": "C"}],

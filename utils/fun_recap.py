@@ -21,10 +21,38 @@ def _first(value) -> dict | None:
     return items[0] if items else None
 
 
+def _to_datetime(value):
+    from datetime import datetime
+
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
+
+
 def build_fun_facts(recap: dict) -> list[dict]:
     facts: list[dict] = []
 
     events = recap.get("events", {}) or {}
+
+    # --- How long the night ran -----------------------------------------
+    started = _to_datetime(recap.get("started_at"))
+    ended = _to_datetime(recap.get("ended_at"))
+    if started and ended:
+        minutes = int((ended - started).total_seconds() / 60)
+        if minutes >= 25:
+            facts.append(
+                {
+                    "type": "night_length",
+                    "hours": minutes // 60,
+                    "minutes": minutes % 60,
+                    "total_minutes": minutes,
+                }
+            )
 
     participants = recap.get("participants", []) or []
     if len(participants) >= 2:
