@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import (
     Depends,
@@ -6,12 +6,16 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Request,
     UploadFile,
 )
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from auth.current_user import get_auth_user, get_current_user
 from recap import build_serialized_recap
+from wrap import build_wrap
+from utils import safewalk
 from utils.join_code import (
     JOIN_CODE_LENGTH,
     night_join_code,
@@ -27,6 +31,9 @@ from repositories.location_repository import LocationRepository
 from repositories.media_repository import MediaRepository
 from repositories.night_repository import NightRepository
 from repositories.participant_repository import ParticipantRepository
+from repositories.personal_location_repository import (
+    PersonalLocationRepository,
+)
 from repositories.recap_repository import RecapRepository
 from repositories.user_repository import UserRepository
 
@@ -42,6 +49,7 @@ location_repository = LocationRepository()
 recap_repository = RecapRepository()
 media_repository = MediaRepository()
 user_repository = UserRepository()
+personal_location_repository = PersonalLocationRepository()
 
 MAX_MEDIA_BYTES = 50 * 1024 * 1024
 
@@ -387,6 +395,7 @@ def get_night(
 @app.post("/nights/{night_id}/end")
 def end_night(
     night_id: str,
+    lang: str | None = None,
     current_user=Depends(get_current_user),
 ):
     night = night_repository.get_by_id(
@@ -428,7 +437,8 @@ def end_night(
     )
 
     recap = build_serialized_recap(
-        finished_night
+        finished_night,
+        language=lang,
     )
 
     recap_repository.save(
@@ -494,6 +504,7 @@ def get_night_recap(
 @app.post("/nights/{night_id}/recap/generate")
 def generate_night_recap(
     night_id: str,
+    lang: str | None = None,
     current_user=Depends(get_current_user),
 ):
     night = night_repository.get_by_id(
@@ -516,7 +527,8 @@ def generate_night_recap(
         )
 
     recap = build_serialized_recap(
-        night
+        night,
+        language=lang,
     )
 
     recap_repository.save(
@@ -525,6 +537,166 @@ def generate_night_recap(
     )
 
     return recap
+
+
+# ---------------------------------------------------------------------------
+# Home location
+# ---------------------------------------------------------------------------
+
+class HomeLocationRequest(BaseModel):
+    latitude: float
+    longitude: float
+    radius_meters: float | None = None
+
+
+def _home_payload(row) -> dict | None:
+    if row is None:
+        return None
+    return {
+        "latitude": row["latitude"],
+        "longitude": row["longitude"],
+        "radius_meters": row["radius_meters"],
+    }
+
+
+@app.get("/me/home")
+def get_home(current_user=Depends(get_current_user)):
+    return _home_payload(
+        personal_location_repository.get_named(
+            current_user["id"], "home"
+        )
+    )
+
+
+@app.put("/me/home")
+def set_home(
+    request: HomeLocationRequest,
+    current_user=Depends(get_current_user),
+):
+    row = personal_location_repository.upsert_named(
+        user_id=current_user["id"],
+        name="home",
+        latitude=request.latitude,
+        longitude=request.longitude,
+        radius_meters=request.radius_meters or 120,
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not save home location",
+        )
+    return _home_payload(row)
+
+
+@app.delete("/me/home")
+def clear_home(current_user=Depends(get_current_user)):
+    personal_location_repository.delete_named(
+        current_user["id"], "home"
+    )
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Monthly wrap
+# ---------------------------------------------------------------------------
+
+@app.get("/wrap")
+def get_wrap(
+    month: str | None = None,
+    current_user=Depends(get_current_user),
+):
+    now = datetime.now(timezone.utc)
+
+    if month:
+        try:
+            year, mon = (int(part) for part in month.split("-")[:2])
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="month must be YYYY-MM",
+            )
+    else:
+        year, mon = now.year, now.month
+
+    start = datetime(year, mon, 1, tzinfo=timezone.utc)
+    if mon == 12:
+        end = datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+    else:
+        end = datetime(year, mon + 1, 1, tzinfo=timezone.utc)
+
+    start_iso = start.isoformat()
+    end_iso = end.isoformat()
+
+    nights = [
+        night
+        for night in night_repository.get_for_user(current_user["id"])
+        if night["status"] == "finished"
+        and night.get("started_at")
+        and start_iso <= night["started_at"] < end_iso
+    ]
+
+    return build_wrap(
+        current_user,
+        f"{year:04d}-{mon:02d}",
+        nights,
+        recap_repository,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Get home safe (optional share links)
+# ---------------------------------------------------------------------------
+
+class SafeWalkStartRequest(BaseModel):
+    name: str | None = None
+
+
+class SafeWalkPingRequest(BaseModel):
+    latitude: float
+    longitude: float
+
+
+@app.post("/safewalks")
+def start_safewalk(
+    request: SafeWalkStartRequest,
+    fastapi_request: Request,
+    current_user=Depends(get_current_user),
+):
+    token = safewalk.create(
+        request.name or current_user.get("name")
+    )
+    base = str(fastapi_request.base_url).rstrip("/")
+    return {"token": token, "url": f"{base}/s/{token}"}
+
+
+@app.post("/safewalks/{token}/ping")
+def ping_safewalk(
+    token: str,
+    request: SafeWalkPingRequest,
+    current_user=Depends(get_current_user),
+):
+    safewalk.ping(token, request.latitude, request.longitude)
+    return {"ok": True}
+
+
+@app.post("/safewalks/{token}/arrive")
+def arrive_safewalk(
+    token: str,
+    current_user=Depends(get_current_user),
+):
+    safewalk.arrive(token)
+    return {"ok": True}
+
+
+@app.get("/s/{token}", response_class=HTMLResponse)
+def view_safewalk(token: str):
+    page = safewalk.render_page(token)
+    if page is None:
+        return HTMLResponse(
+            "<h1>This link has expired.</h1>",
+            status_code=404,
+        )
+    return HTMLResponse(page)
 
 
 @app.post("/nights/{night_id}/media")

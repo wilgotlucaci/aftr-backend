@@ -146,12 +146,45 @@ def _normalise_highlights(raw) -> list[dict]:
     return highlights
 
 
-def generate_fun_copy(facts: list[dict]) -> list[dict]:
+def _language_name(code: str | None) -> str | None:
+    if not code:
+        return None
+    base = code.split("-")[0].split("_")[0].lower()
+    return {
+        "en": None,  # default, no instruction needed
+        "sv": "Swedish",
+        "no": "Norwegian",
+        "nb": "Norwegian",
+        "da": "Danish",
+        "de": "German",
+        "fr": "French",
+        "es": "Spanish",
+        "it": "Italian",
+        "nl": "Dutch",
+        "pt": "Portuguese",
+        "fi": "Finnish",
+        "pl": "Polish",
+    }.get(base, None)
+
+
+def generate_fun_copy(
+    facts: list[dict],
+    language: str | None = None,
+) -> list[dict]:
     if not facts:
         return []
 
     if not os.getenv("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY is missing from .env")
+
+    system_prompt = SYSTEM_PROMPT
+    language_name = _language_name(language)
+    if language_name:
+        system_prompt += (
+            f"\n\nWrite every title and text in {language_name}. "
+            "Keep the humour natural in that language - don't translate "
+            "word for word."
+        )
 
     user_message = (
         "Here are the facts from tonight's Night. Write the highlights.\n\n"
@@ -161,7 +194,7 @@ def generate_fun_copy(facts: list[dict]) -> list[dict]:
     response = get_client().messages.create(
         model=MODEL,
         max_tokens=2000,
-        system=SYSTEM_PROMPT,
+        system=system_prompt,
         messages=[
             {"role": "user", "content": user_message}
         ],

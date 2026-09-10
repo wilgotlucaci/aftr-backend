@@ -60,7 +60,7 @@ def _safe(label, function, default):
         return default
 
 
-def build_recap(night):
+def build_recap(night, language=None):
     events = {
         "group_splits": _safe(
             "group_splits",
@@ -176,14 +176,14 @@ def build_recap(night):
     if fun_facts:
         recap["fun_highlights"] = _safe(
             "fun_highlights",
-            lambda: generate_fun_copy(fun_facts),
+            lambda: generate_fun_copy(fun_facts, language=language),
             [],
         )
 
     return recap
 
 
-def build_serialized_recap(night):
+def build_serialized_recap(night, language=None):
     return serialize_value(
-        build_recap(night)
+        build_recap(night, language=language)
     )
