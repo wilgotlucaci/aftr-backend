@@ -21,14 +21,12 @@ class NightRepository:
         response = (
             supabase
             .table("nights")
-            .insert(
-                {
-                    "title": title,
-                    "started_at": started_at,
-                    "status": status,
-                    "owner_user_id": owner_user_id,
-                }
-            )
+            .insert({
+                "title": title,
+                "started_at": started_at,
+                "status": status,
+                "owner_user_id": owner_user_id,
+            })
             .execute()
         )
 
@@ -37,7 +35,10 @@ class NightRepository:
 
         return response.data[0]
 
-    def get_by_id(self, night_id: str) -> Night | None:
+    def get_by_id(
+        self,
+        night_id: str,
+    ) -> Night | None:
         night_response = (
             supabase
             .table("nights")
@@ -92,6 +93,10 @@ class NightRepository:
                     ),
                     latitude=item["latitude"],
                     longitude=item["longitude"],
+                    speed=item.get("speed"),
+                    horizontal_accuracy=item.get(
+                        "horizontal_accuracy"
+                    ),
                 )
             )
 
@@ -130,11 +135,15 @@ class NightRepository:
                 row["started_at"]
             ),
             ended_at=(
-                datetime.fromisoformat(row["ended_at"])
+                datetime.fromisoformat(
+                    row["ended_at"]
+                )
                 if row["ended_at"]
                 else None
             ),
-            status=NightStatus(row["status"]),
+            status=NightStatus(
+                row["status"]
+            ),
             owner_user_id=row["owner_user_id"],
             participants=participants,
             locations=locations,
@@ -162,12 +171,10 @@ class NightRepository:
         response = (
             supabase
             .table("nights")
-            .update(
-                {
-                    "ended_at": ended_at,
-                    "status": "finished",
-                }
-            )
+            .update({
+                "ended_at": ended_at,
+                "status": "finished",
+            })
             .eq("id", night_id)
             .execute()
         )
@@ -176,3 +183,57 @@ class NightRepository:
             return None
 
         return response.data[0]
+    
+    def get_for_user(self, user_id: str):
+        owned_response = (
+            supabase
+            .table("nights")
+            .select("*")
+            .eq("owner_user_id", user_id)
+            .order("started_at", desc=True)
+            .execute()
+        )
+
+        participant_response = (
+            supabase
+            .table("night_participants")
+            .select("night_id")
+            .eq("user_id", user_id)
+            .execute()
+        )
+
+        participant_night_ids = [
+            item["night_id"]
+            for item in participant_response.data
+        ]
+
+        participant_nights = []
+
+        if participant_night_ids:
+            participant_nights_response = (
+                supabase
+                .table("nights")
+                .select("*")
+                .in_("id", participant_night_ids)
+                .order("started_at", desc=True)
+                .execute()
+            )
+
+            participant_nights = participant_nights_response.data
+
+        nights_by_id = {}
+
+        for night in owned_response.data:
+            nights_by_id[night["id"]] = night
+
+        for night in participant_nights:
+            nights_by_id[night["id"]] = night
+
+        nights = list(nights_by_id.values())
+
+        nights.sort(
+            key=lambda night: night["started_at"],
+            reverse=True,
+        )
+
+        return nights

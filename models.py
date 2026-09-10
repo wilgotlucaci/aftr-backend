@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class NightStatus(str, Enum):
@@ -20,6 +20,8 @@ class LocationPoint(BaseModel):
     timestamp: datetime
     latitude: float
     longitude: float
+    speed: float | None = None
+    horizontal_accuracy: float | None = None
 
 
 class Venue(BaseModel):
@@ -61,9 +63,10 @@ class Night(BaseModel):
     ended_at: datetime | None = None
     status: NightStatus
     owner_user_id: str | None = None
-    participants: list[Participant] = []
-    locations: list[LocationPoint] = []
-    venues: list[Venue] = []
-    venue_visits: list[VenueVisit] = []
-    media: list[MediaItem] = []
-    personal_locations: list[PersonalLocation] = []
+
+    participants: list[Participant] = Field(default_factory=list)
+    locations: list[LocationPoint] = Field(default_factory=list)
+    venues: list[Venue] = Field(default_factory=list)
+    venue_visits: list[VenueVisit] = Field(default_factory=list)
+    media: list[MediaItem] = Field(default_factory=list)
+    personal_locations: list[PersonalLocation] = Field(default_factory=list)

@@ -1,0 +1,163 @@
+import os
+import json
+
+import anthropic
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
+
+# The model used to write the recap highlights. This is a short, creative
+# task, so the cheapest model handles it well. Bump to "claude-sonnet-5"
+# if the jokes ever feel flat.
+MODEL = "claude-haiku-4-5"
+
+
+client = anthropic.Anthropic(
+    api_key=os.getenv("ANTHROPIC_API_KEY")
+)
+
+
+SYSTEM_PROMPT = """
+You are the personality engine for AFTR, a social nightlife recap app.
+
+Your job is to turn structured facts from a night out into short, funny recap highlights.
+
+Tone:
+- playful
+- dry humor
+- slightly cheeky
+- confident
+- sounds like a funny friend
+- never mean
+- never overly enthusiastic
+- never corporate
+- no emojis
+- maximum 2 short sentences per highlight
+
+Important:
+- Only use facts that are provided.
+- You may joke or speculate playfully, but never present invented events as facts.
+- Never invent people, places, relationships or events that are not in the facts.
+- Avoid repetitive wording. Vary the phrasing every time.
+- Avoid generic AI phrases.
+- Give each highlight a short title.
+- Return valid JSON only, with no surrounding text and no markdown code fences.
+
+Return a JSON array in exactly this shape:
+
+[
+  {
+    "type": "most_distance",
+    "title": "Cardio King",
+    "text": "Wilgot covered 4.8 km tonight. Apparently sitting down wasn't part of the plan."
+  }
+]
+""".strip()
+
+
+def _strip_code_fences(text: str) -> str:
+    text = text.strip()
+
+    if not text.startswith("```"):
+        return text
+
+    lines = text.splitlines()
+
+    # Drop the opening fence line (``` or ```json).
+    lines = lines[1:]
+
+    # Drop the closing fence line if present.
+    if lines and lines[-1].strip().startswith("```"):
+        lines = lines[:-1]
+
+    return "\n".join(lines).strip()
+
+
+def _extract_json_array(text: str):
+    """Best-effort parse of a JSON array from the model output.
+
+    Handles the common cases where the model wraps the JSON in a
+    markdown fence or adds a stray sentence before/after it.
+    """
+    cleaned = _strip_code_fences(text)
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    start = cleaned.find("[")
+    end = cleaned.rfind("]")
+
+    if start != -1 and end != -1 and end > start:
+        return json.loads(cleaned[start:end + 1])
+
+    raise ValueError(
+        f"Could not parse fun copy JSON from model output: {text[:500]!r}"
+    )
+
+
+def _normalise_highlights(raw) -> list[dict]:
+    if not isinstance(raw, list):
+        raise ValueError(
+            f"Fun copy response was not a list: {type(raw).__name__}"
+        )
+
+    highlights = []
+
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+
+        title = str(item.get("title", "")).strip()
+        text = str(item.get("text", "")).strip()
+
+        if not title or not text:
+            continue
+
+        highlights.append(
+            {
+                "type": str(item.get("type", "")).strip(),
+                "title": title,
+                "text": text,
+            }
+        )
+
+    return highlights
+
+
+def generate_fun_copy(facts: list[dict]) -> list[dict]:
+    if not facts:
+        return []
+
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        raise RuntimeError("ANTHROPIC_API_KEY is missing from .env")
+
+    user_message = (
+        "Here are the facts from tonight's Night. Write the highlights.\n\n"
+        + json.dumps(facts, indent=2)
+    )
+
+    response = client.messages.create(
+        model=MODEL,
+        max_tokens=2000,
+        system=SYSTEM_PROMPT,
+        messages=[
+            {"role": "user", "content": user_message}
+        ],
+    )
+
+    text = "".join(
+        block.text
+        for block in response.content
+        if block.type == "text"
+    ).strip()
+
+    if not text:
+        raise ValueError("Fun copy response was empty")
+
+    parsed = _extract_json_array(text)
+
+    return _normalise_highlights(parsed)
