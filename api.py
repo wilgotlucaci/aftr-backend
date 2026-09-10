@@ -1,6 +1,13 @@
 from datetime import datetime
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import (
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+)
 from pydantic import BaseModel
 
 from auth.current_user import get_current_user
@@ -10,7 +17,14 @@ from utils.join_code import (
     night_join_code,
     normalise_join_code,
 )
+from utils.storage import (
+    EXTENSION_BY_TYPE,
+    signed_url,
+    storage_path,
+    upload_media,
+)
 from repositories.location_repository import LocationRepository
+from repositories.media_repository import MediaRepository
 from repositories.night_repository import NightRepository
 from repositories.participant_repository import ParticipantRepository
 from repositories.recap_repository import RecapRepository
@@ -25,6 +39,35 @@ night_repository = NightRepository()
 participant_repository = ParticipantRepository()
 location_repository = LocationRepository()
 recap_repository = RecapRepository()
+media_repository = MediaRepository()
+
+MAX_MEDIA_BYTES = 50 * 1024 * 1024
+
+
+def _require_night_access(night_id: str, user_id: str):
+    """Load a Night and 403 unless the user is a participant or the host."""
+    night = night_repository.get_by_id(night_id)
+
+    if night is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Night not found",
+        )
+
+    is_participant = participant_repository.is_in_night(
+        night_id=night_id,
+        user_id=user_id,
+    )
+
+    is_owner = night.owner_user_id == user_id
+
+    if not is_participant and not is_owner:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have access to this Night",
+        )
+
+    return night
 
 
 class CreateNightRequest(BaseModel):
@@ -446,3 +489,96 @@ def generate_night_recap(
     )
 
     return recap
+
+
+@app.post("/nights/{night_id}/media")
+async def add_media(
+    night_id: str,
+    file: UploadFile = File(...),
+    taken_at: str | None = Form(None),
+    latitude: float | None = Form(None),
+    longitude: float | None = Form(None),
+    venue_name: str | None = Form(None),
+    current_user=Depends(get_current_user),
+):
+    _require_night_access(night_id, current_user["id"])
+
+    content_type = file.content_type or ""
+
+    if content_type not in EXTENSION_BY_TYPE:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported media type: {content_type}",
+        )
+
+    content = await file.read()
+
+    if len(content) > MAX_MEDIA_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="File is larger than 50 MB",
+        )
+
+    path = storage_path(
+        night_id,
+        current_user["id"],
+        content_type,
+    )
+
+    try:
+        upload_media(path, content, content_type)
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Storage upload failed: {error}",
+        )
+
+    media_type = (
+        "video"
+        if content_type.startswith("video/")
+        else "image"
+    )
+
+    row = media_repository.create(
+        night_id=night_id,
+        user_id=current_user["id"],
+        storage_path=path,
+        media_type=media_type,
+        taken_at=taken_at,
+        latitude=latitude,
+        longitude=longitude,
+        venue_name=venue_name,
+    )
+
+    if row is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not save media",
+        )
+
+    return {
+        "id": row["id"],
+        "media_type": media_type,
+        "url": signed_url(path),
+    }
+
+
+@app.get("/nights/{night_id}/media")
+def list_media(
+    night_id: str,
+    current_user=Depends(get_current_user),
+):
+    _require_night_access(night_id, current_user["id"])
+
+    return [
+        {
+            "id": row["id"],
+            "media_type": row["media_type"],
+            "taken_at": row["taken_at"],
+            "latitude": row["latitude"],
+            "longitude": row["longitude"],
+            "venue_name": row["venue_name"],
+            "url": signed_url(row["storage_path"]),
+        }
+        for row in media_repository.get_for_night(night_id)
+    ]
