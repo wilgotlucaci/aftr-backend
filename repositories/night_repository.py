@@ -163,6 +163,17 @@ class NightRepository:
 
         return response.data
 
+    def get_active(self):
+        response = (
+            supabase
+            .table("nights")
+            .select("*")
+            .eq("status", "active")
+            .execute()
+        )
+
+        return response.data
+
     def end(
         self,
         night_id: str,

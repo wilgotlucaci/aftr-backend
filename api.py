@@ -22,8 +22,22 @@ location_repository = LocationRepository()
 recap_repository = RecapRepository()
 
 
+JOIN_CODE_LENGTH = 6
+
+
+def night_join_code(night_id: str) -> str:
+    """Short, shareable code for a Night: the first 6 hex characters of
+    its UUID, uppercased. Collisions are vanishingly unlikely among the
+    handful of Nights active at any one time."""
+    return night_id.replace("-", "")[:JOIN_CODE_LENGTH].upper()
+
+
 class CreateNightRequest(BaseModel):
     title: str
+
+
+class JoinNightRequest(BaseModel):
+    code: str
 
 
 class CreateLocationRequest(BaseModel):
@@ -90,6 +104,71 @@ def create_night(
         )
 
     return night
+
+
+@app.post("/nights/join")
+def join_night_by_code(
+    request: JoinNightRequest,
+    current_user=Depends(get_current_user),
+):
+    code = (
+        request.code.strip()
+        .replace("-", "")
+        .upper()
+    )
+
+    if len(code) < JOIN_CODE_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid Night code",
+        )
+
+    code = code[:JOIN_CODE_LENGTH]
+
+    match = next(
+        (
+            night
+            for night in night_repository.get_active()
+            if night_join_code(night["id"]) == code
+        ),
+        None,
+    )
+
+    if match is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No active Night with that code",
+        )
+
+    already_in = participant_repository.is_in_night(
+        night_id=match["id"],
+        user_id=current_user["id"],
+    )
+
+    if not already_in:
+        participant = participant_repository.add_to_night(
+            night_id=match["id"],
+            user_id=current_user["id"],
+            joined_at=datetime.now()
+            .astimezone()
+            .isoformat(),
+        )
+
+        if participant is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Could not join Night",
+            )
+
+    return {
+        "id": match["id"],
+        "title": match["title"],
+        "started_at": match["started_at"],
+        "ended_at": match["ended_at"],
+        "status": match["status"],
+        "owner_user_id": match["owner_user_id"],
+        "join_code": night_join_code(match["id"]),
+    }
 
 
 @app.post("/nights/{night_id}/participants")
@@ -212,6 +291,7 @@ def get_night(
     return {
         "id": night.id,
         "title": night.title,
+        "join_code": night_join_code(night.id),
         "started_at": night.started_at.isoformat(),
         "ended_at": (
             night.ended_at.isoformat()
