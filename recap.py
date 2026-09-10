@@ -14,6 +14,7 @@ from events.side_quest import detect_side_quest
 from utils.fun_copy import generate_fun_copy
 from utils.fun_recap import build_fun_facts
 from utils.movement import build_movement_stats
+from utils.route import build_route
 from utils.venue_timeline import build_venue_timeline
 
 from events.venue_stats import build_venue_stats
@@ -114,6 +115,12 @@ def build_recap(night):
         [],
     )
 
+    route = _safe(
+        "route",
+        lambda: build_route(night),
+        [],
+    )
+
     venue_stats = _safe(
         "venue_stats",
         lambda: build_venue_stats(night),
@@ -152,6 +159,7 @@ def build_recap(night):
         "venue_timeline": venue_timeline,
         "venue_stats": venue_stats,
         "movement_stats": movement_stats,
+        "route": route,
     }
 
     # AI copy generation must never be able to break a Night. If it fails
