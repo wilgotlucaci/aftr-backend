@@ -1,0 +1,22 @@
+# Render blueprint. In the Render dashboard: New + -> Blueprint -> pick
+# this repo, and it creates the service from this file. You still enter
+# the four secret values in the dashboard (they are marked sync: false).
+services:
+  - type: web
+    name: aftr-backend
+    runtime: python
+    plan: free
+    region: frankfurt
+    branch: master
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn api:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: GOOGLE_PLACES_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false

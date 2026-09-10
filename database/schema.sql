@@ -68,3 +68,17 @@ create table recaps (
     recap_data jsonb not null,
     generated_at timestamptz default now()
 );
+
+create table media (
+    id uuid primary key default gen_random_uuid(),
+    night_id uuid references nights(id) on delete cascade,
+    user_id uuid references users(id) on delete cascade,
+    storage_path text not null,          -- path within the night-media bucket
+    media_type text not null,            -- 'image' | 'video'
+    taken_at timestamptz,
+    latitude double precision,
+    longitude double precision,
+    venue_name text,
+    created_at timestamptz default now()
+);
+
