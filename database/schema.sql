@@ -1,5 +1,9 @@
+-- Current AFTR database schema (Supabase / Postgres).
+-- Kept in sync with the live tables by hand; not run automatically.
+
 create table users (
     id uuid primary key,
+    auth_user_id uuid unique not null,   -- maps to Supabase Auth: auth.users.id
     name text not null,
     created_at timestamptz default now()
 );
@@ -9,7 +13,8 @@ create table nights (
     title text not null,
     started_at timestamptz not null,
     ended_at timestamptz,
-    status text not null,
+    status text not null,                -- active | processing | finished
+    owner_user_id uuid references users(id) on delete cascade,
     created_at timestamptz default now()
 );
 
@@ -27,7 +32,9 @@ create table location_points (
     user_id uuid references users(id) on delete cascade,
     recorded_at timestamptz not null,
     latitude double precision not null,
-    longitude double precision not null
+    longitude double precision not null,
+    speed double precision,
+    horizontal_accuracy double precision
 );
 
 create table personal_locations (

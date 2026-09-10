@@ -47,21 +47,89 @@ def serialize_value(value):
     return value
 
 
-def build_recap(night):
-    group_splits = detect_group_splits(night)
-    houdini = detect_houdini(night)
-    side_quests = detect_side_quest(night)
-    dynamic_duo = detect_dynamic_duo(night)
-    reunions = detect_reunions(night)
-    most_independent = detect_most_independent(night)
-    early_checkout = detect_early_checkout(night)
-    late_arrivals = detect_late_arrivals(night)
-    most_distance = detect_most_distance(night)
+def _safe(label, function, default):
+    """Run one recap section. If it raises, log it and fall back to
+    ``default`` so a single broken detector can never stop a Night from
+    ending.
+    """
+    try:
+        return function()
+    except Exception as error:
+        print(f"Recap section '{label}' failed: {error}")
+        return default
 
-    venue_timeline = build_venue_timeline(night)
-    venue_stats = build_venue_stats(night)
-    movement_stats = build_movement_stats(
-        night.locations
+
+def build_recap(night):
+    events = {
+        "group_splits": _safe(
+            "group_splits",
+            lambda: detect_group_splits(night),
+            [],
+        ),
+        "houdini": _safe(
+            "houdini",
+            lambda: detect_houdini(night),
+            [],
+        ),
+        "side_quests": _safe(
+            "side_quests",
+            lambda: detect_side_quest(night),
+            [],
+        ),
+        "dynamic_duo": _safe(
+            "dynamic_duo",
+            lambda: detect_dynamic_duo(night),
+            [],
+        ),
+        "reunions": _safe(
+            "reunions",
+            lambda: detect_reunions(night),
+            [],
+        ),
+        "most_independent": _safe(
+            "most_independent",
+            lambda: detect_most_independent(night),
+            [],
+        ),
+        "early_checkout": _safe(
+            "early_checkout",
+            lambda: detect_early_checkout(night),
+            [],
+        ),
+        "late_arrivals": _safe(
+            "late_arrivals",
+            lambda: detect_late_arrivals(night),
+            [],
+        ),
+        "most_distance": _safe(
+            "most_distance",
+            lambda: detect_most_distance(night),
+            None,
+        ),
+    }
+
+    venue_timeline = _safe(
+        "venue_timeline",
+        lambda: build_venue_timeline(night),
+        [],
+    )
+
+    venue_stats = _safe(
+        "venue_stats",
+        lambda: build_venue_stats(night),
+        {},
+    )
+
+    movement_stats = _safe(
+        "movement_stats",
+        lambda: build_movement_stats(night.locations),
+        {
+            "stationary_minutes": 0,
+            "walking_minutes": 0,
+            "fast_movement_minutes": 0,
+            "vehicle_minutes": 0,
+            "unknown_minutes": 0,
+        },
     )
 
     recap = {
@@ -79,39 +147,30 @@ def build_recap(night):
             for participant in night.participants
         ],
 
-        "events": {
-            "group_splits": group_splits,
-            "houdini": houdini,
-            "side_quests": side_quests,
-            "dynamic_duo": dynamic_duo,
-            "reunions": reunions,
-            "most_independent": most_independent,
-            "early_checkout": early_checkout,
-            "late_arrivals": late_arrivals,
-            "most_distance": most_distance,
-        },
+        "events": events,
 
         "venue_timeline": venue_timeline,
         "venue_stats": venue_stats,
         "movement_stats": movement_stats,
     }
 
-    # AI copy generation must never be able to break a Night.
-    # If it fails for any reason, the recap is still saved with
-    # an empty fun_highlights list and the error is logged.
+    # AI copy generation must never be able to break a Night. If it fails
+    # for any reason, the recap is still saved with an empty
+    # fun_highlights list and the error is logged.
     recap["fun_highlights"] = []
 
-    fun_facts = build_fun_facts(recap)
+    fun_facts = _safe(
+        "fun_facts",
+        lambda: build_fun_facts(recap),
+        [],
+    )
 
     if fun_facts:
-        try:
-            recap["fun_highlights"] = generate_fun_copy(
-                fun_facts
-            )
-        except Exception as error:
-            print(
-                f"Fun copy generation failed: {error}"
-            )
+        recap["fun_highlights"] = _safe(
+            "fun_highlights",
+            lambda: generate_fun_copy(fun_facts),
+            [],
+        )
 
     return recap
 
