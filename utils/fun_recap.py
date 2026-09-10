@@ -191,4 +191,17 @@ def build_fun_facts(recap: dict) -> list[dict]:
             }
         )
 
+    # Nothing notable happened - still give the AI one dry line to land,
+    # rather than showing an empty recap.
+    if not facts:
+        minutes = None
+        if started and ended:
+            minutes = int((ended - started).total_seconds() / 60)
+        facts.append(
+            {
+                "type": "quiet_night",
+                "total_minutes": minutes,
+            }
+        )
+
     return facts

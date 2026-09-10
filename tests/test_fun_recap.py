@@ -22,9 +22,10 @@ def test_handles_most_independent_as_a_list():
     assert fact["solo_minutes"] == 50
 
 
-def test_empty_recap_yields_no_facts():
-    assert build_fun_facts({}) == []
-    assert build_fun_facts({"events": {}}) == []
+def test_empty_recap_yields_only_a_quiet_night_fact():
+    for recap in ({}, {"events": {}}):
+        facts = build_fun_facts(recap)
+        assert [f["type"] for f in facts] == ["quiet_night"]
 
 
 def test_a_real_length_night_always_has_at_least_one_fact():
@@ -40,7 +41,7 @@ def test_a_real_length_night_always_has_at_least_one_fact():
     assert length["hours"] == 5 and length["minutes"] == 20
 
 
-def test_a_trivial_length_night_still_has_no_facts():
+def test_a_trivial_length_night_falls_back_to_quiet_night():
     from datetime import datetime
 
     recap = {
@@ -48,7 +49,9 @@ def test_a_trivial_length_night_still_has_no_facts():
         "started_at": datetime(2026, 9, 10, 22, 0),
         "ended_at": datetime(2026, 9, 10, 22, 10),
     }
-    assert build_fun_facts(recap) == []
+    facts = build_fun_facts(recap)
+    assert [f["type"] for f in facts] == ["quiet_night"]
+    assert facts[0]["total_minutes"] == 10
 
 
 def test_pulls_a_broad_set_of_facts():
@@ -90,9 +93,9 @@ def test_pulls_a_broad_set_of_facts():
     } <= types
 
 
-def test_short_distance_is_not_a_fact():
+def test_short_distance_is_not_a_distance_fact():
     recap = {"events": {"most_distance": {"participant_name": "A", "distance_km": 0.2}}}
-    assert build_fun_facts(recap) == []
+    assert _types(build_fun_facts(recap)) == {"quiet_night"}
 
 
 def test_unknown_location_venue_is_ignored():
@@ -102,4 +105,4 @@ def test_unknown_location_venue_is_ignored():
             {"venue_name": "Unknown location", "duration_minutes": 30}
         ],
     }
-    assert build_fun_facts(recap) == []
+    assert _types(build_fun_facts(recap)) == {"quiet_night"}
