@@ -10,7 +10,7 @@ from fastapi import (
 )
 from pydantic import BaseModel
 
-from auth.current_user import get_current_user
+from auth.current_user import get_auth_user, get_current_user
 from recap import build_serialized_recap
 from utils.join_code import (
     JOIN_CODE_LENGTH,
@@ -28,6 +28,7 @@ from repositories.media_repository import MediaRepository
 from repositories.night_repository import NightRepository
 from repositories.participant_repository import ParticipantRepository
 from repositories.recap_repository import RecapRepository
+from repositories.user_repository import UserRepository
 
 
 app = FastAPI(
@@ -40,6 +41,7 @@ participant_repository = ParticipantRepository()
 location_repository = LocationRepository()
 recap_repository = RecapRepository()
 media_repository = MediaRepository()
+user_repository = UserRepository()
 
 MAX_MEDIA_BYTES = 50 * 1024 * 1024
 
@@ -70,6 +72,10 @@ def _require_night_access(night_id: str, user_id: str):
     return night
 
 
+class RegisterRequest(BaseModel):
+    name: str
+
+
 class CreateNightRequest(BaseModel):
     title: str
 
@@ -98,6 +104,36 @@ def get_me(
     current_user=Depends(get_current_user),
 ):
     return current_user
+
+
+@app.post("/users")
+def register(
+    request: RegisterRequest,
+    auth_user=Depends(get_auth_user),
+):
+    """Create the AFTR user row for a freshly signed-up Supabase account.
+    Idempotent - returns the existing row if it already exists."""
+    existing = user_repository.get_by_auth_user_id(
+        str(auth_user.id)
+    )
+
+    if existing is not None:
+        return existing
+
+    name = request.name.strip() or "Someone"
+
+    user = user_repository.create(
+        auth_user_id=str(auth_user.id),
+        name=name,
+    )
+
+    if user is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Could not create AFTR user",
+        )
+
+    return user
 
 
 @app.get("/nights")

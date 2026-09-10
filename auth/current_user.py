@@ -9,9 +9,11 @@ security = HTTPBearer()
 user_repository = UserRepository()
 
 
-def get_current_user(
+def get_auth_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
+    """Validate the Supabase access token and return the auth user.
+    Does NOT require an AFTR `users` row - use this for registration."""
     token = credentials.credentials
 
     try:
@@ -29,6 +31,12 @@ def get_current_user(
             detail="Invalid access token",
         )
 
+    return auth_user
+
+
+def get_current_user(
+    auth_user=Depends(get_auth_user),
+):
     user = user_repository.get_by_auth_user_id(
         str(auth_user.id)
     )
