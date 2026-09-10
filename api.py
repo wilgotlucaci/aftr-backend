@@ -5,6 +5,11 @@ from pydantic import BaseModel
 
 from auth.current_user import get_current_user
 from recap import build_serialized_recap
+from utils.join_code import (
+    JOIN_CODE_LENGTH,
+    night_join_code,
+    normalise_join_code,
+)
 from repositories.location_repository import LocationRepository
 from repositories.night_repository import NightRepository
 from repositories.participant_repository import ParticipantRepository
@@ -20,16 +25,6 @@ night_repository = NightRepository()
 participant_repository = ParticipantRepository()
 location_repository = LocationRepository()
 recap_repository = RecapRepository()
-
-
-JOIN_CODE_LENGTH = 6
-
-
-def night_join_code(night_id: str) -> str:
-    """Short, shareable code for a Night: the first 6 hex characters of
-    its UUID, uppercased. Collisions are vanishingly unlikely among the
-    handful of Nights active at any one time."""
-    return night_id.replace("-", "")[:JOIN_CODE_LENGTH].upper()
 
 
 class CreateNightRequest(BaseModel):
@@ -111,19 +106,13 @@ def join_night_by_code(
     request: JoinNightRequest,
     current_user=Depends(get_current_user),
 ):
-    code = (
-        request.code.strip()
-        .replace("-", "")
-        .upper()
-    )
+    code = normalise_join_code(request.code)
 
     if len(code) < JOIN_CODE_LENGTH:
         raise HTTPException(
             status_code=400,
             detail="Invalid Night code",
         )
-
-    code = code[:JOIN_CODE_LENGTH]
 
     match = next(
         (

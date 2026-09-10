@@ -14,9 +14,20 @@ load_dotenv()
 MODEL = "claude-haiku-4-5"
 
 
-client = anthropic.Anthropic(
-    api_key=os.getenv("ANTHROPIC_API_KEY")
-)
+_client: anthropic.Anthropic | None = None
+
+
+def get_client() -> anthropic.Anthropic:
+    """Build the Anthropic client on first use so importing this module
+    never requires a key (keeps tests and offline runs working)."""
+    global _client
+
+    if _client is None:
+        _client = anthropic.Anthropic(
+            api_key=os.getenv("ANTHROPIC_API_KEY")
+        )
+
+    return _client
 
 
 SYSTEM_PROMPT = """
@@ -144,7 +155,7 @@ def generate_fun_copy(facts: list[dict]) -> list[dict]:
         + json.dumps(facts, indent=2)
     )
 
-    response = client.messages.create(
+    response = get_client().messages.create(
         model=MODEL,
         max_tokens=2000,
         system=SYSTEM_PROMPT,
