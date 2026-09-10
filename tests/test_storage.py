@@ -7,7 +7,7 @@ def test_storage_path_layout_and_extension():
 
     assert prefix == "night-1/user-9"
     assert filename.endswith(".jpg")
-    assert len(filename) == len("<32hex>.jpg")
+    assert len(filename) == 32 + len(".jpg")  # 32 hex chars + extension
 
 
 def test_unknown_type_falls_back_to_bin():
