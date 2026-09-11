@@ -20,7 +20,7 @@ def build_wrap(user: dict, month: str, nights: list[dict], recap_repository):
     distance_meters_total = 0.0
     venue_counts: dict[str, int] = {}
     people_counts: dict[str, int] = {}
-    weekday_counts: dict[str, int] = {}
+    weekday_counts: dict[int, int] = {}
     latest_end_hour: float | None = None
 
     for night in nights:
@@ -31,7 +31,10 @@ def build_wrap(user: dict, month: str, nights: list[dict], recap_repository):
             total_minutes += max(
                 0, int((ended - started).total_seconds() / 60)
             )
-            weekday = started.strftime("%A")
+            # Monday=0 .. Sunday=6 - language-agnostic. The client
+            # localizes this to a weekday name via Foundation's Calendar,
+            # so the app stays in the user's system language.
+            weekday = started.weekday()
             weekday_counts[weekday] = weekday_counts.get(weekday, 0) + 1
 
             hour = ended.hour + ended.minute / 60
@@ -71,7 +74,7 @@ def build_wrap(user: dict, month: str, nights: list[dict], recap_repository):
     top_people = sorted(
         people_counts.items(), key=lambda kv: kv[1], reverse=True
     )[:3]
-    busiest_weekday = (
+    busiest_weekday_index = (
         max(weekday_counts, key=weekday_counts.get)
         if weekday_counts else None
     )
@@ -89,7 +92,7 @@ def build_wrap(user: dict, month: str, nights: list[dict], recap_repository):
         "top_people": [
             {"name": name, "count": count} for name, count in top_people
         ],
-        "busiest_weekday": busiest_weekday,
+        "busiest_weekday_index": busiest_weekday_index,
         "latest_end_hour": (
             round(latest_end_hour, 1)
             if latest_end_hour is not None else None

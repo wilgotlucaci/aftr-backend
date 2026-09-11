@@ -62,7 +62,7 @@ def test_wrap_aggregates_across_nights():
     assert wrap["unique_venues"] == 2
     assert wrap["top_venues"][0] == {"name": "Bar X", "count": 2}
     assert wrap["top_people"] == [{"name": "Erik", "count": 2}]
-    assert wrap["busiest_weekday"] in {"Friday", "Thursday"}
+    assert wrap["busiest_weekday_index"] in {3, 4}  # Thursday, Friday
 
 
 def test_wrap_handles_no_nights():
@@ -70,4 +70,4 @@ def test_wrap_handles_no_nights():
     assert wrap["nights"] == 0
     assert wrap["distance_km"] == 0.0
     assert wrap["top_venues"] == []
-    assert wrap["busiest_weekday"] is None
+    assert wrap["busiest_weekday_index"] is None
