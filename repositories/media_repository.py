@@ -12,6 +12,7 @@ class MediaRepository:
         latitude: float | None = None,
         longitude: float | None = None,
         venue_name: str | None = None,
+        source_asset_id: str | None = None,
     ):
         response = (
             supabase
@@ -25,6 +26,7 @@ class MediaRepository:
                 "latitude": latitude,
                 "longitude": longitude,
                 "venue_name": venue_name,
+                "source_asset_id": source_asset_id,
             })
             .execute()
         )

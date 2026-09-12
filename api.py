@@ -752,6 +752,7 @@ async def add_media(
     latitude: float | None = Form(None),
     longitude: float | None = Form(None),
     venue_name: str | None = Form(None),
+    source_asset_id: str | None = Form(None),
     current_user=Depends(get_current_user),
 ):
     _require_night_access(night_id, current_user["id"])
@@ -801,6 +802,7 @@ async def add_media(
         latitude=latitude,
         longitude=longitude,
         venue_name=venue_name,
+        source_asset_id=source_asset_id,
     )
 
     if row is None:
@@ -832,6 +834,7 @@ def list_media(
             "longitude": row["longitude"],
             "venue_name": row["venue_name"],
             "url": signed_url(row["storage_path"]),
+            "source_asset_id": row.get("source_asset_id"),
         }
         for row in media_repository.get_for_night(night_id)
     ]

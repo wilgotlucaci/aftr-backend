@@ -80,6 +80,7 @@ create table media (
     latitude double precision,
     longitude double precision,
     venue_name text,
-    created_at timestamptz default now()
+    created_at timestamptz default now(),
+    source_asset_id text                 -- iOS PHAsset.localIdentifier, when known - lets the client dedupe live-captured vs. manually-added photos
 );
 
