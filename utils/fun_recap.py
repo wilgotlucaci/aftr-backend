@@ -217,9 +217,27 @@ def build_group_facts(recap: dict) -> list[dict]:
     participants = recap.get("participants", []) or []
 
     # A "Night" with one person has no group to report on - the group
-    # page shows a single teasing line instead of any stats.
+    # page shows a single teasing line instead of any stats. Give the AI
+    # something that actually varies per Night (name, duration) - a bare
+    # {"type": "solo_night"} fact is identical every single time, which
+    # left it with nothing to riff on and it kept writing the same joke.
     if len(participants) < 2:
-        return [{"type": "solo_night"}]
+        started = _to_datetime(recap.get("started_at"))
+        ended = _to_datetime(recap.get("ended_at"))
+        minutes = (
+            int((ended - started).total_seconds() / 60)
+            if started and ended
+            else None
+        )
+        return [
+            {
+                "type": "solo_night",
+                "participant_name": (
+                    participants[0].get("name") if participants else None
+                ),
+                "total_minutes": minutes,
+            }
+        ]
 
     facts: list[dict] = []
     events = recap.get("events", {}) or {}

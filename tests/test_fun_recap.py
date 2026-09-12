@@ -117,6 +117,20 @@ def test_group_facts_solo_night_is_just_the_one_fact():
         assert [f["type"] for f in facts] == ["solo_night"]
 
 
+def test_group_facts_solo_night_carries_name_and_duration():
+    # Regression: a bare {"type": "solo_night"} fact is identical every
+    # time, so the AI had nothing to vary the joke against and kept
+    # writing the same line for every solo Night.
+    recap = {
+        "participants": [{"name": "Wilgot"}],
+        "started_at": "2026-09-12T19:00:00",
+        "ended_at": "2026-09-12T21:30:00",
+    }
+    fact = build_group_facts(recap)[0]
+    assert fact["participant_name"] == "Wilgot"
+    assert fact["total_minutes"] == 150
+
+
 def test_group_facts_with_no_events_falls_back_to_uneventful():
     recap = {
         "participants": [{"name": "A"}, {"name": "B"}],

@@ -40,11 +40,16 @@ produce only one or two highlights - never pad. If the only fact is
 "quiet_night", return exactly one highlight that bluntly, funnily calls
 out how little happened - dead night, nothing to report, boring - short
 and a bit cheeky, never a lecture. If the only fact is "solo_night",
-return exactly one highlight teasing the person for going out with no
-one to share it with - short, funny, a little blunt, never mean-spirited.
-If the only fact is "uneventful_group_night", return exactly one
-highlight that spins the group staying glued together the whole night as
-the story itself, rather than treating it as nothing happening.
+return exactly one highlight built around the fact that literally no one
+joined this person's Night - riff on having no friends, being a loner,
+nobody wanting to hang out, dying alone, that kind of bit - by name (if
+given), and use the actual duration to vary the joke (a 20-minute solo
+night reads very differently from a 5-hour one) rather than writing a
+generic line - short, funny, a little blunt, never mean-spirited, still
+a joke between friends rather than an actual insult. If the only fact is
+"uneventful_group_night", return exactly one highlight that spins the
+group staying glued together the whole night as the story itself, rather
+than treating it as nothing happening.
 
 Tone:
 - playful
