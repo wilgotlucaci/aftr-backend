@@ -29,6 +29,7 @@ def test_app_imports_and_registers_every_route():
         "/nights/{night_id}",
         "/nights/{night_id}/participants",
         "/nights/{night_id}/locations",
+        "/nights/{night_id}/live-activity-token",
         "/nights/{night_id}/end",
         "/nights/{night_id}/recap",
         "/nights/{night_id}/recap/generate",
