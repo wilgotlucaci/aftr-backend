@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from auth.current_user import get_auth_user, get_current_user
 from recap import build_serialized_recap
 from wrap import build_wrap
-from utils import safewalk
+from utils import apns, safewalk
 from utils.join_code import (
     JOIN_CODE_LENGTH,
     night_join_code,
@@ -90,6 +90,10 @@ class CreateNightRequest(BaseModel):
 
 class JoinNightRequest(BaseModel):
     code: str
+
+
+class LiveActivityTokenRequest(BaseModel):
+    push_token: str
 
 
 class CreateLocationRequest(BaseModel):
@@ -392,6 +396,24 @@ def get_night(
     }
 
 
+@app.post("/nights/{night_id}/live-activity-token")
+def set_live_activity_token(
+    night_id: str,
+    request: LiveActivityTokenRequest,
+    current_user=Depends(get_current_user),
+):
+    """Stores the Lock Screen Live Activity's push token so /end can push
+    an immediate "ended" update to it via APNs - see utils/apns.py."""
+    _require_night_access(night_id, current_user["id"])
+
+    night_repository.set_live_activity_push_token(
+        night_id=night_id,
+        push_token=request.push_token,
+    )
+
+    return {"status": "ok"}
+
+
 @app.post("/nights/{night_id}/end")
 def end_night(
     night_id: str,
@@ -446,11 +468,34 @@ def end_night(
         recap,
     )
 
+    _push_live_activity_end(night_id, finished_night)
+
     return {
         "night": ended_night,
         "recap_generated": True,
         "recap": recap,
     }
+
+
+def _push_live_activity_end(night_id: str, night):
+    """Best-effort - a Live Activity is a nice-to-have, so this must never
+    fail the actual "end this Night" request."""
+    if not apns.is_configured():
+        return
+
+    push_token = night_repository.get_live_activity_push_token(night_id)
+
+    if not push_token:
+        return
+
+    try:
+        apns.send_live_activity_end(
+            push_token=push_token,
+            night_title=night.title,
+            started_at_unix=night.started_at.timestamp(),
+        )
+    except Exception as error:  # noqa: BLE001
+        print(f"[apns] Failed to push Live Activity end for {night_id}: {error}")
 
 
 @app.get("/nights/{night_id}/recap")

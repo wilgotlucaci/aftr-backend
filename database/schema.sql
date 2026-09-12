@@ -15,7 +15,8 @@ create table nights (
     ended_at timestamptz,
     status text not null,                -- active | processing | finished
     owner_user_id uuid references users(id) on delete cascade,
-    created_at timestamptz default now()
+    created_at timestamptz default now(),
+    live_activity_push_token text         -- APNs token for the Lock Screen Live Activity, set by the app once it starts one
 );
 
 create table night_participants (

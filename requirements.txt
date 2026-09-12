@@ -7,3 +7,5 @@ supabase
 anthropic
 pytest
 python-multipart
+httpx[http2]
+pyjwt[crypto]

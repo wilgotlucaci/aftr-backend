@@ -194,7 +194,38 @@ class NightRepository:
             return None
 
         return response.data[0]
-    
+
+    def set_live_activity_push_token(
+        self,
+        night_id: str,
+        push_token: str,
+    ):
+        (
+            supabase
+            .table("nights")
+            .update({"live_activity_push_token": push_token})
+            .eq("id", night_id)
+            .execute()
+        )
+
+    def get_live_activity_push_token(
+        self,
+        night_id: str,
+    ) -> str | None:
+        response = (
+            supabase
+            .table("nights")
+            .select("live_activity_push_token")
+            .eq("id", night_id)
+            .limit(1)
+            .execute()
+        )
+
+        if not response.data:
+            return None
+
+        return response.data[0].get("live_activity_push_token")
+
     def get_for_user(self, user_id: str):
         owned_response = (
             supabase
