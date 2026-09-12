@@ -1,4 +1,4 @@
-from utils.fun_recap import build_fun_facts
+from utils.fun_recap import build_fun_facts, build_group_facts
 
 
 def _types(facts):
@@ -106,3 +106,83 @@ def test_unknown_location_venue_is_ignored():
         ],
     }
     assert _types(build_fun_facts(recap)) == {"quiet_night"}
+
+
+def test_group_facts_solo_night_is_just_the_one_fact():
+    for recap in (
+        {"participants": []},
+        {"participants": [{"name": "Wilgot"}]},
+    ):
+        facts = build_group_facts(recap)
+        assert [f["type"] for f in facts] == ["solo_night"]
+
+
+def test_group_facts_with_no_events_falls_back_to_uneventful():
+    recap = {
+        "participants": [{"name": "A"}, {"name": "B"}],
+        "events": {},
+    }
+    facts = build_group_facts(recap)
+    assert [f["type"] for f in facts] == ["uneventful_group_night"]
+    assert facts[0]["people"] == 2
+
+
+def test_group_facts_never_includes_individual_only_types():
+    # most_distance, venues, movement, night_length are on the recap's
+    # own page (build_fun_facts) - the group page must not duplicate them.
+    recap = {
+        "participants": [{"name": "A"}, {"name": "B"}],
+        "started_at": "2026-09-10T22:00:00",
+        "ended_at": "2026-09-11T03:20:00",
+        "events": {
+            "most_distance": {"participant_name": "A", "distance_km": 4.2},
+            "houdini": [{"name": "B", "duration_minutes": 30}],
+        },
+        "venue_timeline": [
+            {"venue_name": "Bar X", "duration_minutes": 40},
+        ],
+        "movement_stats": {"walking_minutes": 25},
+    }
+
+    types = _types(build_group_facts(recap))
+
+    assert types == {"houdini"}
+    assert "most_distance" not in types
+    assert "venues" not in types
+    assert "movement" not in types
+    assert "night_length" not in types
+
+
+def test_group_facts_pulls_the_full_group_only_set():
+    recap = {
+        "participants": [{"name": "A"}, {"name": "B"}, {"name": "C"}],
+        "events": {
+            "group_splits": [{"duration_minutes": 15}],
+            "houdini": [{"name": "B", "duration_minutes": 30}],
+            "side_quests": [
+                {"name": "B", "distance_km": 1.5, "duration_minutes": 30}
+            ],
+            "reunions": [{"duration_minutes": 20}, {"duration_minutes": 40}],
+            "dynamic_duo": {
+                "name_a": "A",
+                "name_b": "C",
+                "together_percentage": 90,
+            },
+            "most_independent": [{"name": "B", "solo_minutes": 50}],
+            "late_arrivals": [{"name": "C", "minutes_late": 45}],
+            "early_checkout": [{"name": "A", "minutes_before_end": 60}],
+        },
+    }
+
+    types = _types(build_group_facts(recap))
+
+    assert {
+        "group_splits",
+        "houdini",
+        "side_quest",
+        "reunions",
+        "dynamic_duo",
+        "most_independent",
+        "late_arrival",
+        "early_checkout",
+    } <= types

@@ -39,7 +39,12 @@ Ignore the rest. A quiet night with only one or two real facts should
 produce only one or two highlights - never pad. If the only fact is
 "quiet_night", return exactly one highlight that bluntly, funnily calls
 out how little happened - dead night, nothing to report, boring - short
-and a bit cheeky, never a lecture.
+and a bit cheeky, never a lecture. If the only fact is "solo_night",
+return exactly one highlight teasing the person for going out with no
+one to share it with - short, funny, a little blunt, never mean-spirited.
+If the only fact is "uneventful_group_night", return exactly one
+highlight that spins the group staying glued together the whole night as
+the story itself, rather than treating it as nothing happening.
 
 Tone:
 - playful

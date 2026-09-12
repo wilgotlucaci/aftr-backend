@@ -205,3 +205,121 @@ def build_fun_facts(recap: dict) -> list[dict]:
         )
 
     return facts
+
+
+def build_group_facts(recap: dict) -> list[dict]:
+    """Facts for the recap's separate "group" page - only things that are
+    about the group as a whole (who split off, who came back, who was
+    glued together), never an individual's own numbers. Those already
+    have their own page via build_fun_facts above; this is additive, not
+    a replacement.
+    """
+    participants = recap.get("participants", []) or []
+
+    # A "Night" with one person has no group to report on - the group
+    # page shows a single teasing line instead of any stats.
+    if len(participants) < 2:
+        return [{"type": "solo_night"}]
+
+    facts: list[dict] = []
+    events = recap.get("events", {}) or {}
+
+    group_splits = _as_list(events.get("group_splits"))
+    if group_splits:
+        facts.append(
+            {
+                "type": "group_splits",
+                "count": len(group_splits),
+                "longest_apart_minutes": max(
+                    (split.get("duration_minutes") or 0)
+                    for split in group_splits
+                ),
+            }
+        )
+
+    for houdini in _as_list(events.get("houdini")):
+        facts.append(
+            {
+                "type": "houdini",
+                "participant_name": houdini.get("name"),
+                "duration_minutes": houdini.get("duration_minutes"),
+            }
+        )
+
+    for side_quest in _as_list(events.get("side_quests")):
+        facts.append(
+            {
+                "type": "side_quest",
+                "participant_name": side_quest.get("name"),
+                "distance_km": side_quest.get("distance_km"),
+                "duration_minutes": side_quest.get("duration_minutes"),
+            }
+        )
+
+    reunions = _as_list(events.get("reunions"))
+    if reunions:
+        facts.append(
+            {
+                "type": "reunions",
+                "count": len(reunions),
+                "longest_apart_minutes": max(
+                    (reunion.get("duration_minutes") or 0)
+                    for reunion in reunions
+                ),
+            }
+        )
+
+    dynamic_duo = _first(events.get("dynamic_duo"))
+    if dynamic_duo:
+        facts.append(
+            {
+                "type": "dynamic_duo",
+                "name_a": dynamic_duo.get("name_a"),
+                "name_b": dynamic_duo.get("name_b"),
+                "together_percentage": dynamic_duo.get(
+                    "together_percentage"
+                ),
+            }
+        )
+
+    most_independent = _first(events.get("most_independent"))
+    if most_independent:
+        facts.append(
+            {
+                "type": "most_independent",
+                "participant_name": most_independent.get("name")
+                or most_independent.get("participant_name"),
+                "solo_minutes": most_independent.get("solo_minutes")
+                or most_independent.get("duration_minutes"),
+            }
+        )
+
+    for late in _as_list(events.get("late_arrivals")):
+        facts.append(
+            {
+                "type": "late_arrival",
+                "participant_name": late.get("name"),
+                "minutes_late": late.get("minutes_late"),
+            }
+        )
+
+    for early in _as_list(events.get("early_checkout")):
+        facts.append(
+            {
+                "type": "early_checkout",
+                "participant_name": early.get("name"),
+                "minutes_before_end": early.get("minutes_before_end"),
+            }
+        )
+
+    # The group stayed together the whole time - not a lack of a story,
+    # it is the story.
+    if not facts:
+        facts.append(
+            {
+                "type": "uneventful_group_night",
+                "people": len(participants),
+            }
+        )
+
+    return facts

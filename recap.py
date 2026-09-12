@@ -12,7 +12,7 @@ from events.reunion import detect_reunions
 from events.side_quest import detect_side_quest
 
 from utils.fun_copy import generate_fun_copy
-from utils.fun_recap import build_fun_facts
+from utils.fun_recap import build_fun_facts, build_group_facts
 from utils.movement import build_movement_stats
 from utils.route import build_route
 from utils.venue_timeline import build_venue_timeline
@@ -177,6 +177,23 @@ def build_recap(night, language=None):
         recap["fun_highlights"] = _safe(
             "fun_highlights",
             lambda: generate_fun_copy(fun_facts, language=language),
+            [],
+        )
+
+    # The group page's own highlights - independent from fun_highlights
+    # above so the original recap page's content/behavior never changes.
+    recap["group_highlights"] = []
+
+    group_facts = _safe(
+        "group_facts",
+        lambda: build_group_facts(recap),
+        [],
+    )
+
+    if group_facts:
+        recap["group_highlights"] = _safe(
+            "group_highlights",
+            lambda: generate_fun_copy(group_facts, language=language),
             [],
         )
 
